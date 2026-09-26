@@ -8,13 +8,11 @@ from __future__ import annotations
 
 import asyncio
 import os
-import threading
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
 import aiohttp
 import uvicorn
-from aiohttp import web
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel
 
@@ -23,8 +21,8 @@ WIDGET_JS_PATH = BASE_DIR / "dist" / "widget" / "music-player-widget.global.js"
 NCM_API_BASE_URL = os.getenv("NCM_API_BASE_URL", "http://127.0.0.1:3939").rstrip("/")
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:3942").rstrip("/")
 NCM_COOKIE_FILE = os.getenv("NCM_COOKIE_FILE", "")
-MCP_HOST, MCP_PORT = os.getenv("MCP_HOST", "127.0.0.1"), int(os.getenv("MCP_PORT", "3941"))
-PROXY_HOST, PROXY_PORT = os.getenv("PROXY_HOST", "127.0.0.1"), int(os.getenv("PROXY_PORT", "3942"))
+MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
+MCP_PORT = int(os.getenv("PORT", os.getenv("MCP_PORT", "3941")))
 ALLOWED_AUDIO_HOST_SUFFIXES = tuple(
     item.strip().lower()
     for item in os.getenv("ALLOWED_AUDIO_HOST_SUFFIXES", ".music.126.net").split(",")
@@ -175,42 +173,85 @@ async def play_music(keywords: str, color_primary: str = "#6e7c87", color_second
 @mcp.tool(name="play_music_by_id", description="Render a compact in-chat music player for a Netease track ID.", meta=WIDGET_META)
 async def play_music_by_id(song_id: int, color_primary: str = "#6e7c87", color_secondary: str = "#CAE0E8", color_bg: str = "#1a1d21") -> MusicPayload:
     return payload(await music_info(song_id), color_primary, color_secondary, color_bg)
+async def handle_proxy(request):
+    from starlette.responses import Response, StreamingResponse
 
-
-async def handle_proxy(request: web.Request) -> web.StreamResponse:
-    target_url = request.query.get("url", "")
+    target_url = request.query_params.get("url", "")
     if not target_url:
-        return web.Response(text="Missing url parameter", status=400)
+        return Response("Missing url parameter", status_code=400)
+
     if not is_allowed_audio_url(target_url):
-        return web.Response(text="Audio host is not allowed", status=403)
-    headers = {"Referer": "https://music.163.com/", "User-Agent": "Mozilla/5.0"}
-    if request.headers.get("Range"):
-        headers["Range"] = request.headers["Range"]
+        return Response("Audio host is not allowed", status_code=403)
+
+    headers = {
+        "Referer": "https://music.163.com/",
+        "User-Agent": "Mozilla/5.0",
+    }
+
+    if request.headers.get("range"):
+        headers["Range"] = request.headers["range"]
+
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as session:
-            async with session.get(target_url, headers=headers) as upstream:
-                if upstream.status not in {200, 206}:
-                    return web.Response(text=f"Upstream error: {upstream.status}", status=upstream.status)
-                response = web.StreamResponse(status=upstream.status)
-                for header in ("Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"):
-                    if upstream.headers.get(header):
-                        response.headers[header] = upstream.headers[header]
-                response.headers.update({"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=600"})
-                await response.prepare(request)
+        session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=60)
+        )
+        upstream = await session.get(target_url, headers=headers)
+
+        if upstream.status not in {200, 206}:
+            status = upstream.status
+            upstream.close()
+            await session.close()
+            return Response(
+                f"Upstream error: {status}",
+                status_code=status,
+            )
+
+        response_headers = {
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "public, max-age=600",
+        }
+
+        for header in (
+            "Content-Type",
+            "Content-Length",
+            "Content-Range",
+            "Accept-Ranges",
+        ):
+            if upstream.headers.get(header):
+                response_headers[header] = upstream.headers[header]
+
+        async def stream_audio():
+            try:
                 async for chunk in upstream.content.iter_chunked(64 * 1024):
-                    await response.write(chunk)
-                await response.write_eof()
-                return response
+                    yield chunk
+            finally:
+                upstream.close()
+                await session.close()
+
+        return StreamingResponse(
+            stream_audio(),
+            status_code=upstream.status,
+            headers=response_headers,
+        )
+
     except (aiohttp.ClientError, asyncio.TimeoutError) as error:
-        return web.Response(text=f"Audio proxy error: {error}", status=502)
+        return Response(
+            f"Audio proxy error: {error}",
+            status_code=502,
+        )
 
 
-def run_proxy() -> None:
-    app = web.Application()
-    app.router.add_get("/proxy", handle_proxy)
-    web.run_app(app, host=PROXY_HOST, port=PROXY_PORT, handle_signals=False)
+app = mcp.streamable_http_app()
+
+from starlette.routing import Route
+
+app.routes.append(Route("/proxy", handle_proxy, methods=["GET"]))
 
 
 if __name__ == "__main__":
-    threading.Thread(target=run_proxy, daemon=True).start()
-    uvicorn.run(mcp.streamable_http_app(), host=MCP_HOST, port=MCP_PORT)
+    uvicorn.run(
+        app,
+        host=MCP_HOST,
+        port=MCP_PORT,
+)
+
