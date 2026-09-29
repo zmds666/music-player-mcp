@@ -19,7 +19,7 @@ from pydantic import BaseModel
 BASE_DIR = Path(__file__).parent
 WIDGET_JS_PATH = BASE_DIR / "dist" / "widget" / "music-player-widget.global.js"
 NCM_API_BASE_URL = os.getenv("NCM_API_BASE_URL", "http://127.0.0.1:3939").rstrip("/")
-PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:3942").rstrip("/")
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:3941").rstrip("/")
 NCM_COOKIE_FILE = os.getenv("NCM_COOKIE_FILE", "")
 MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
 MCP_PORT = int(os.getenv("PORT", os.getenv("MCP_PORT", "3941")))
@@ -53,14 +53,14 @@ WIDGET_META = {
     "ui": {
         "resourceUri": MUSIC_VIEW_URI,
         "csp": {
-            "resourceDomains": ["https://*.music.126.net"],
+            "resourceDomains": ["https://*.music.126.net", "http://127.0.0.1:3941"],
             "connectDomains": [PUBLIC_BASE_URL],
         },
     },
 }
 
 
-@mcp.resource(MUSIC_VIEW_URI, mime_type=MUSIC_VIEW_MIME, name="music-player", meta=WIDGET_META["ui"])
+@mcp.resource(MUSIC_VIEW_URI, mime_type=MUSIC_VIEW_MIME, name="music-player", meta={"ui": WIDGET_META["ui"]})
 def music_view() -> str:
     return widget_html()
 

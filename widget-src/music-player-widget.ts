@@ -256,27 +256,16 @@ function render(data: MusicData, platform: "claude" | "chatgpt") {
   let realDuration = data.duration;
   let activeLyricIdx = -1;
 
-  // 预加载音频到blob解决seek问题
+  // 直接使用音频代理 URL，避免 blob CSP 限制
   const preloadAudio = async () => {
     loadingEl.style.display = "flex";
     iPlay.style.opacity = "0";
-    try {
-      const resp = await fetch(data.audioUrl);
-      const blob = await resp.blob();
-      blobUrl = URL.createObjectURL(blob);
-      audio.src = blobUrl;
-      audioReady = true;
-    } catch (e) {
-      console.warn("[music] preload failed, using direct URL");
-      audio.src = data.audioUrl;
-      audioReady = true;
-    }
+    audio.src = data.audioUrl;
+    audioReady = true;
     loadingEl.style.display = "none";
     iPlay.style.opacity = "1";
   };
-
   // hover显示圆点
-  progressWrap.addEventListener("mouseenter", () => { dot.style.opacity = "1"; });
   progressWrap.addEventListener("mouseleave", () => { if (!playing) dot.style.opacity = "0"; });
 
   const updateLyric = (currentTime: number) => {
