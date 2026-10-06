@@ -14,6 +14,7 @@ from urllib.parse import quote, urlparse
 import aiohttp
 import uvicorn
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
 
 BASE_DIR = Path(__file__).parent
@@ -31,7 +32,16 @@ ALLOWED_AUDIO_HOST_SUFFIXES = tuple(
 
 MUSIC_VIEW_URI = "ui://music-player/mcp-app-v1.html"
 MUSIC_VIEW_MIME = "text/html;profile=mcp-app"
-mcp = FastMCP("music-player")
+mcp = FastMCP(
+    "music-player",
+    transport_security=TransportSecuritySettings(
+        allowed_hosts=[
+            "music-player-mcp-production.up.railway.app",
+            "localhost:*",
+            "127.0.0.1:*",
+        ]
+    ),
+)
 
 
 def widget_html() -> str:
