@@ -63,7 +63,7 @@ WIDGET_META = {
     "ui": {
         "resourceUri": MUSIC_VIEW_URI,
         "csp": {
-            "resourceDomains": ["https://*.music.126.net", "http://127.0.0.1:3941"],
+            "resourceDomains": ["https://*.music.126.net", PUBLIC_BASE_URL],
             "connectDomains": [PUBLIC_BASE_URL],
         },
     },
