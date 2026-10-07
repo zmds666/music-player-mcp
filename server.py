@@ -22,6 +22,7 @@ WIDGET_JS_PATH = BASE_DIR / "dist" / "widget" / "music-player-widget.global.js"
 NCM_API_BASE_URL = os.getenv("NCM_API_BASE_URL", "http://127.0.0.1:3939").rstrip("/")
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:3941").rstrip("/")
 NCM_COOKIE_FILE = os.getenv("NCM_COOKIE_FILE", "")
+NCM_COOKIE = os.getenv("NCM_COOKIE", "")
 MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
 MCP_PORT = int(os.getenv("PORT", os.getenv("MCP_PORT", "3941")))
 ALLOWED_AUDIO_HOST_SUFFIXES = tuple(
@@ -89,6 +90,8 @@ class MusicPayload(BaseModel):
 
 
 def get_cookie() -> str:
+    if NCM_COOKIE:
+        return NCM_COOKIE.strip()
     if not NCM_COOKIE_FILE:
         return ""
     try:
